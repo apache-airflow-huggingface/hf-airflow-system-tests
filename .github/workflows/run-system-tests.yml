@@ -1,0 +1,162 @@
+name: Run Hugging Face system tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      airflow_ref:
+        description: Airflow branch, tag, or commit SHA
+        required: true
+        default: main
+        type: string
+  schedule:
+    - cron: '0 4 * * 1'
+
+concurrency:
+  group: huggingface-system-tests-history
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  system-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      AIRFLOW_REF: ${{ inputs.airflow_ref || 'main' }}
+    steps:
+      - name: Check out dashboard repository
+        uses: actions/checkout@v4
+
+      - name: Check out Airflow
+        uses: actions/checkout@v4
+        with:
+          repository: apache/airflow
+          ref: ${{ env.AIRFLOW_REF }}
+          path: airflow
+          fetch-depth: 1
+
+      - name: Record run metadata
+        id: start
+        run: echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Validate provider system-test path
+        working-directory: airflow
+        run: |
+          test_dir='providers/huggingface/tests/system/huggingface'
+          test_readme="$test_dir/README.md"
+          if [[ ! -d "$test_dir" || ! -f "$test_readme" ]]; then
+            echo "Expected provider system-test directory and README at $test_dir" >&2
+            exit 1
+          fi
+          echo 'Provider system-test README at selected Airflow revision:'
+          cat "$test_readme"
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          root = Path('providers/huggingface/tests/system/huggingface')
+          print('System-test source docstrings at selected Airflow revision:')
+          for path in sorted(root.rglob('test_*.py')):
+              if any(part.startswith('.') for part in path.parts):
+                  continue
+              try:
+                  tree = ast.parse(path.read_text(encoding='utf-8'))
+              except (OSError, SyntaxError) as error:
+                  print(f'Could not inspect {path}: {error}')
+                  continue
+              docs = [ast.get_docstring(tree)]
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                      doc = ast.get_docstring(node)
+                      if doc:
+                          docs.append(doc)
+              docs = [doc for doc in docs if doc]
+              if docs:
+                  print(f'--- {path} ---')
+                  print('\n\n'.join(docs))
+          PY
+
+      - name: Run provider system tests with Breeze
+        id: tests
+        working-directory: airflow
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          set +e
+          mkdir -p files/airflow-breeze-config
+          export AIRFLOW_BREEZE_ENV_FILE="$PWD/files/airflow-breeze-config/environment_variables.env"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          target = Path(os.environ["AIRFLOW_BREEZE_ENV_FILE"])
+          values = [
+              "PYTEST_ADDOPTS=--junitxml=/opt/airflow/junit.xml",
+              "HF_AIRFLOW_SYSTEM_TEST_RUN_ID=" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"],
+          ]
+          if os.environ.get("HF_TOKEN"):
+              values.append("HF_TOKEN=" + os.environ["HF_TOKEN"])
+          target.write_text("\n".join(values) + "\n", encoding="utf-8")
+          target.chmod(0o600)
+          PY
+          trap 'rm -f "$AIRFLOW_BREEZE_ENV_FILE"' EXIT
+          ./breeze testing system-tests providers/huggingface/tests/system/huggingface/
+          test_status=$?
+          echo "exit_code=$test_status" >> "$GITHUB_OUTPUT"
+          exit "$test_status"
+
+      - name: Record run and update history
+        if: always()
+        env:
+          STARTED_AT: ${{ steps.start.outputs.started_at }}
+          TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
+        run: |
+          ended_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          exit_code="${TEST_EXIT_CODE:-1}"
+          python3 scripts/summarize_junit.py \
+            --junit airflow/junit.xml \
+            --output /tmp/hf-system-test-run.json \
+            --history site/data/runs.json \
+            --airflow-ref "$AIRFLOW_REF" \
+            --airflow-sha "$(git -C airflow rev-parse HEAD)" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --run-id "$GITHUB_RUN_ID" \
+            --started-at "${STARTED_AT:-$ended_at}" \
+            --finished-at "$ended_at" \
+            --exit-code "$exit_code"
+
+      - name: Commit updated run history
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add site/data/runs.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Record Hugging Face system test run $GITHUB_RUN_ID"
+            git push
+          fi
+
+      - name: Sanitize JUnit report for artifact
+        if: always() && hashFiles('airflow/junit.xml') != ''
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('airflow/junit.xml')
+          for node in tree.iter():
+              if node.tag in {'system-out', 'system-err', 'properties'}:
+                  node.clear()
+              elif node.tag in {'failure', 'error'}:
+                  node.attrib.pop('message', None)
+                  node.attrib.pop('type', None)
+                  node.text = '[details removed from public artifact]'
+          tree.write('junit-sanitized.xml', encoding='utf-8', xml_declaration=True)
+          PY
+
+      - name: Upload JUnit report
+        if: always() && hashFiles('airflow/junit.xml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: huggingface-system-test-junit-${{ github.run_id }}
+          path: junit-sanitized.xml
+          if-no-files-found: ignore
+          retention-days: 14
+

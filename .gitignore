@@ -1,6 +1,11 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
+files/airflow-breeze-config/environment_variables.env
+files/airflow-breeze-config/
+junit.xml
+*.junit.xml
+artifacts/
 *$py.class
 
 # C extensions
