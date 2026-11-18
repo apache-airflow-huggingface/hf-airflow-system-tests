@@ -4,93 +4,681 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Recent Hugging Face provider system test runs against Apache Airflow.">
-  <title>Hugging Face · Airflow system tests</title>
+  <title>Hugging Face · Airflow System Tests</title>
   <style>
-    :root { color-scheme: light; --ink:#17212b; --muted:#637181; --line:#dce3e9; --panel:#fff; --bg:#f4f7f9; --green:#16794b; --red:#b42318; --amber:#8a5a00; }
-    * { box-sizing:border-box }
-    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
-    main { max-width:1080px; margin:0 auto; padding:48px 24px 72px }
-    header { margin-bottom:28px }
-    h1 { font-size:clamp(1.8rem,4vw,2.7rem); letter-spacing:-.04em; margin:0 0 8px }
-    h2 { font-size:1.2rem; margin:0 0 14px }
-    p { color:var(--muted); margin:0 }
-    a { color:#1456a0 }
-    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:24px 0 }
-    .card, .history { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px }
-    .label { color:var(--muted); font-size:.82rem; text-transform:uppercase; letter-spacing:.06em }
-    .value { margin-top:6px; font-size:1.2rem; font-weight:650; overflow-wrap:anywhere }
-    .status { display:inline-flex; align-items:center; gap:8px; text-transform:capitalize }
-    .status::before { content:""; width:10px; height:10px; border-radius:50%; background:currentColor }
-    .success { color:var(--green) }.failure { color:var(--red) }.unknown { color:var(--amber) }
-    .table-wrap { overflow-x:auto }
-    table { width:100%; border-collapse:collapse; text-align:left; white-space:nowrap }
-    th,td { padding:12px 10px; border-bottom:1px solid var(--line) }
-    th { color:var(--muted); font-size:.82rem; font-weight:600 }
-    td:first-child,th:first-child { padding-left:0 }
-    td:last-child,th:last-child { padding-right:0 }
-    code { font-size:.88em }
-    .empty { padding:24px 0; color:var(--muted) }
-    footer { margin-top:20px; font-size:.9rem }
-    @media(max-width:700px) { main{padding:32px 16px}.grid{grid-template-columns:1fr} }
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --panel: #ffffff;
+      --panel-subtle: #f1f5f9;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --accent: #2563eb;
+      --hf-gold: #f59e0b;
+      --green-ink: #15803d;
+      --green-bg: #dcfce7;
+      --green-border: #bbf7d0;
+      --green-dot: #22c55e;
+      --red-ink: #b91c1c;
+      --red-bg: #fee2e2;
+      --red-border: #fecaca;
+      --red-dot: #ef4444;
+      --amber-ink: #b45309;
+      --amber-bg: #fef3c7;
+      --amber-border: #fde68a;
+      --amber-dot: #f59e0b;
+      --shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b0f19;
+        --panel: #111827;
+        --panel-subtle: #1e293b;
+        --ink: #f8fafc;
+        --muted: #94a3b8;
+        --line: #1e293b;
+        --accent: #60a5fa;
+        --green-ink: #86efac;
+        --green-bg: rgba(34, 197, 94, 0.14);
+        --green-border: rgba(34, 197, 94, 0.28);
+        --red-ink: #fca5a5;
+        --red-bg: rgba(239, 68, 68, 0.14);
+        --red-border: rgba(239, 68, 68, 0.28);
+        --amber-ink: #fcd34d;
+        --amber-bg: rgba(245, 158, 11, 0.14);
+        --amber-border: rgba(245, 158, 11, 0.28);
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 44px 24px 72px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 28px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+
+    .eyebrow-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--hf-gold);
+    }
+
+    h1 {
+      font-size: clamp(1.6rem, 3.2vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin: 0;
+      line-height: 1.2;
+    }
+
+    header p {
+      color: var(--muted);
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 0.84rem;
+      font-weight: 500;
+      text-decoration: none;
+      box-shadow: var(--shadow);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .btn-link:hover {
+      border-color: var(--muted);
+      background: var(--panel-subtle);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .card, .history, .timeline-bar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .card {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .value {
+      margin-top: 10px;
+      font-size: 1.25rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      overflow-wrap: anywhere;
+    }
+
+    .subvalue {
+      margin-top: 4px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .timeline-bar {
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .timeline-track {
+      display: grid;
+      grid-template-columns: repeat(30, minmax(0, 1fr));
+      gap: 4px;
+      height: 22px;
+    }
+
+    .tick {
+      border-radius: 4px;
+      background: var(--panel-subtle);
+      border: 1px solid var(--line);
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    .tick.success {
+      background: var(--green-dot);
+      border-color: transparent;
+    }
+
+    .tick.failure {
+      background: var(--red-dot);
+      border-color: transparent;
+    }
+
+    .tick.unknown {
+      background: var(--amber-dot);
+      border-color: transparent;
+    }
+
+    .tick[data-url] {
+      cursor: pointer;
+    }
+
+    .tick[data-url]:hover {
+      transform: scaleY(1.18);
+      opacity: 0.9;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: capitalize;
+      line-height: 1.4;
+      border: 1px solid transparent;
+    }
+
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .status.success {
+      color: var(--green-ink);
+      background: var(--green-bg);
+      border-color: var(--green-border);
+    }
+    .status.success::before { background: var(--green-dot); }
+
+    .status.failure {
+      color: var(--red-ink);
+      background: var(--red-bg);
+      border-color: var(--red-border);
+    }
+    .status.failure::before { background: var(--red-dot); }
+
+    .status.unknown {
+      color: var(--amber-ink);
+      background: var(--amber-bg);
+      border-color: var(--amber-border);
+    }
+    .status.unknown::before { background: var(--amber-dot); }
+
+    .history {
+      padding: 20px 22px;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 1.05rem;
+      font-weight: 650;
+      margin: 0;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th, td {
+      padding: 12px 12px;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.9rem;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: var(--panel);
+    }
+
+    tbody tr:hover {
+      background: var(--panel-subtle);
+    }
+
+    td:first-child, th:first-child { padding-left: 8px; }
+    td:last-child, th:last-child { padding-right: 8px; text-align: right; }
+
+    .time-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .time-primary {
+      font-weight: 500;
+    }
+
+    .time-rel {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .test-pill-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .test-count {
+      font-weight: 550;
+    }
+
+    .test-meta {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.82rem;
+      background: var(--panel-subtle);
+      border: 1px solid var(--line);
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .code-link {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .code-link:hover code {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .empty {
+      padding: 32px 0;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    footer {
+      margin-top: 16px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 540px) {
+      main { padding: 28px 16px 48px; }
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>Hugging Face · Airflow system tests</h1>
-      <p>Results from provider system tests in the selected Apache Airflow revision, run with Breeze.</p>
+      <div class="brand">
+        <div class="eyebrow"><span class="eyebrow-dot"></span>Apache Airflow Provider CI</div>
+        <h1>Hugging Face · System Tests</h1>
+        <p>Automated end-to-end provider verification against Apache Airflow inside Breeze.</p>
+      </div>
+      <div class="header-links">
+        <a class="btn-link" href="./data/runs.json" target="_blank" rel="noopener noreferrer">JSON Feed</a>
+      </div>
     </header>
+
     <section class="grid" aria-label="Latest run summary">
-      <article class="card"><div class="label">Latest status</div><div class="value" id="latest">Loading…</div></article>
-      <article class="card"><div class="label">Last successful run</div><div class="value" id="last-success">—</div></article>
-      <article class="card"><div class="label">Latest test counts</div><div class="value" id="counts">—</div></article>
+      <article class="card">
+        <div class="label">Latest Status</div>
+        <div class="value" id="latest">Loading…</div>
+        <div class="subvalue" id="latest-duration">—</div>
+      </article>
+      <article class="card">
+        <div class="label">Pass Rate (Last 30)</div>
+        <div class="value" id="pass-rate">—</div>
+        <div class="subvalue" id="run-total">—</div>
+      </article>
+      <article class="card">
+        <div class="label">Latest Test Suite</div>
+        <div class="value" id="counts">—</div>
+        <div class="subvalue" id="counts-sub">—</div>
+      </article>
+      <article class="card">
+        <div class="label">Last Successful Run</div>
+        <div class="value" id="last-success">—</div>
+        <div class="subvalue" id="last-success-rel">—</div>
+      </article>
     </section>
+
+    <section class="timeline-bar" aria-label="Recent run health strip">
+      <div class="timeline-header">
+        <span>Run health history (oldest → newest)</span>
+        <span id="timeline-summary">Last 30 runs</span>
+      </div>
+      <div class="timeline-track" id="timeline"></div>
+    </section>
+
     <section class="history">
-      <h2>Recent runs</h2>
+      <div class="history-header">
+        <h2>Recent Runs</h2>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Finished (UTC)</th><th>Result</th><th>Tests</th><th>Duration</th><th>Airflow ref / SHA</th><th>Run</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Finished (UTC)</th>
+              <th>Result</th>
+              <th>Tests</th>
+              <th>Duration</th>
+              <th>Airflow Ref / Commit</th>
+              <th>Logs</th>
+            </tr>
+          </thead>
           <tbody id="runs"></tbody>
         </table>
         <p class="empty" id="empty" hidden>No runs have been recorded yet.</p>
       </div>
-      <footer>History is limited to the 30 most recent runs. Full test output is available in the corresponding GitHub Actions run.</footer>
+      <footer>
+        <span>Showing up to the 30 most recent runs.</span>
+        <span>Full task logs &amp; sanitized JUnit reports are attached to each GitHub Actions run.</span>
+      </footer>
     </section>
   </main>
+
   <script>
-    const time = value => value ? new Date(value).toLocaleString(undefined, { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : '—';
-    const duration = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : '—';
-    const text = (tag, value) => { const node = document.createElement(tag); node.textContent = value; return node; };
-    fetch('./data/runs.json', { cache: 'no-store' }).then(response => {
-      if (!response.ok) throw new Error(`History fetch failed (${response.status})`);
-      return response.json();
-    }).then(data => {
-      const runs = Array.isArray(data.runs) ? data.runs : [];
-      const latest = runs[0];
-      if (!latest) { document.querySelector('#latest').textContent = 'No runs yet'; document.querySelector('#empty').hidden = false; return; }
-      const status = document.createElement('span');
-      status.className = `status ${latest.result === 'success' ? 'success' : latest.result === 'failure' ? 'failure' : 'unknown'}`;
-      status.textContent = latest.result || 'unknown';
-      document.querySelector('#latest').replaceChildren(status);
-      const success = runs.find(run => run.result === 'success');
-      document.querySelector('#last-success').textContent = success ? time(success.finished_at) : 'None recorded';
-      const tests = latest.tests;
-      document.querySelector('#counts').textContent = tests ? `${tests.passed} passed · ${tests.failed} failed · ${tests.skipped} skipped (${tests.total} total)` : 'Counts unavailable';
-      const body = document.querySelector('#runs');
-      for (const run of runs) {
-        const row = document.createElement('tr');
-        row.append(text('td', time(run.finished_at)));
-        const state = document.createElement('td');
-        const badge = document.createElement('span'); badge.className = `status ${run.result === 'success' ? 'success' : 'failure'}`; badge.textContent = run.result || 'unknown'; state.append(badge); row.append(state);
-        row.append(text('td', run.tests ? `${run.tests.passed}/${run.tests.total} passed${run.tests.skipped ? `, ${run.tests.skipped} skipped` : ''}` : 'Unavailable'));
-        row.append(text('td', duration(run.duration_seconds)));
-        const revision = document.createElement('td'); revision.append(text('code', `${run.airflow_ref || ''} · ${(run.airflow_sha || '').slice(0, 12)}`)); row.append(revision);
-        const linkCell = document.createElement('td');
-        if (typeof run.workflow_run_url === 'string' && /^https:\/\//.test(run.workflow_run_url)) { const link = document.createElement('a'); link.href = run.workflow_run_url; link.textContent = 'Actions'; link.rel = 'noopener noreferrer'; linkCell.append(link); }
-        else linkCell.textContent = '—';
-        row.append(linkCell); body.append(row);
+    const formatTime = value => {
+      if (!value) return '—';
+      const d = new Date(value);
+      return Number.isNaN(d.getTime())
+        ? '—'
+        : d.toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' UTC';
+    };
+
+    const formatRelative = value => {
+      if (!value) return '';
+      const diffSeconds = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+      if (!Number.isFinite(diffSeconds) || diffSeconds < 0) return 'just now';
+      if (diffSeconds < 60) return `${diffSeconds}s ago`;
+      const mins = Math.floor(diffSeconds / 60);
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      return `${days}d ago`;
+    };
+
+    const formatDuration = seconds => {
+      if (!Number.isFinite(seconds)) return '—';
+      const m = Math.floor(seconds / 60);
+      const s = Math.round(seconds % 60);
+      return m > 0 ? `${m}m ${s}s` : `${s}s`;
+    };
+
+    const makeText = (tag, value, className) => {
+      const node = document.createElement(tag);
+      node.textContent = value;
+      if (className) node.className = className;
+      return node;
+    };
+
+    const statusClass = result =>
+      result === 'success' ? 'success' : result === 'failure' ? 'failure' : 'unknown';
+
+    const renderTimeline = runs => {
+      const track = document.querySelector('#timeline');
+      track.replaceChildren();
+      const slice = runs.slice(0, 30).reverse();
+      const emptySlots = Math.max(0, 30 - slice.length);
+
+      for (let i = 0; i < emptySlots; i++) {
+        const tick = document.createElement('div');
+        tick.className = 'tick';
+        tick.title = 'No run recorded';
+        track.append(tick);
       }
-    }).catch(error => { document.querySelector('#latest').textContent = 'History unavailable'; console.error(error); });
+
+      for (const run of slice) {
+        const tick = document.createElement('div');
+        const cls = statusClass(run.result);
+        tick.className = `tick ${cls}`;
+        tick.title = `${(run.result || 'unknown').toUpperCase()} · ${formatTime(run.finished_at)} · ${formatDuration(run.duration_seconds)}`;
+        if (typeof run.workflow_run_url === 'string' && /^https:\/\//.test(run.workflow_run_url)) {
+          tick.dataset.url = run.workflow_run_url;
+          tick.addEventListener('click', () => window.open(run.workflow_run_url, '_blank', 'noopener,noreferrer'));
+        }
+        track.append(tick);
+      }
+    };
+
+    fetch('./data/runs.json', { cache: 'no-store' })
+      .then(response => {
+        if (!response.ok) throw new Error(`History fetch failed (${response.status})`);
+        return response.json();
+      })
+      .then(data => {
+        const runs = Array.isArray(data.runs) ? data.runs : [];
+        renderTimeline(runs);
+
+        const latest = runs[0];
+        if (!latest) {
+          document.querySelector('#latest').textContent = 'No runs yet';
+          document.querySelector('#empty').hidden = false;
+          return;
+        }
+
+        // Card 1: Latest status
+        const status = makeText('span', latest.result || 'unknown', `status ${statusClass(latest.result)}`);
+        document.querySelector('#latest').replaceChildren(status);
+        document.querySelector('#latest-duration').textContent =
+          `Duration: ${formatDuration(latest.duration_seconds)} · ${formatRelative(latest.finished_at)}`;
+
+        // Card 2: Pass rate
+        const passedRuns = runs.filter(r => r.result === 'success').length;
+        const rate = Math.round((passedRuns / runs.length) * 100);
+        document.querySelector('#pass-rate').textContent = `${rate}%`;
+        document.querySelector('#run-total').textContent = `${passedRuns} of ${runs.length} recorded runs succeeded`;
+
+        // Card 3: Latest test counts
+        const tests = latest.tests;
+        if (tests) {
+          document.querySelector('#counts').textContent = `${tests.passed} / ${tests.total} passed`;
+          document.querySelector('#counts-sub').textContent =
+            `${tests.failed} failed · ${tests.skipped} skipped`;
+        } else {
+          document.querySelector('#counts').textContent = 'Unavailable';
+        }
+
+        // Card 4: Last successful run
+        const success = runs.find(run => run.result === 'success');
+        if (success) {
+          document.querySelector('#last-success').textContent = formatRelative(success.finished_at);
+          document.querySelector('#last-success-rel').textContent = formatTime(success.finished_at);
+        } else {
+          document.querySelector('#last-success').textContent = 'None recorded';
+        }
+
+        // Table rows
+        const body = document.querySelector('#runs');
+        for (const run of runs) {
+          const row = document.createElement('tr');
+
+          // Finished (UTC) + relative
+          const timeTd = document.createElement('td');
+          const timeWrap = makeText('div', '', 'time-cell');
+          timeWrap.append(
+            makeText('span', formatTime(run.finished_at), 'time-primary'),
+            makeText('span', formatRelative(run.finished_at), 'time-rel')
+          );
+          timeTd.append(timeWrap);
+          row.append(timeTd);
+
+          // Result badge
+          const stateTd = document.createElement('td');
+          stateTd.append(makeText('span', run.result || 'unknown', `status ${statusClass(run.result)}`));
+          row.append(stateTd);
+
+          // Tests
+          const testsTd = document.createElement('td');
+          if (run.tests) {
+            const group = makeText('div', '', 'test-pill-group');
+            group.append(makeText('span', `${run.tests.passed}/${run.tests.total} passed`, 'test-count'));
+            if (run.tests.failed || run.tests.skipped) {
+              const extras = [];
+              if (run.tests.failed) extras.push(`${run.tests.failed} failed`);
+              if (run.tests.skipped) extras.push(`${run.tests.skipped} skipped`);
+              group.append(makeText('span', `(${extras.join(', ')})`, 'test-meta'));
+            }
+            testsTd.append(group);
+          } else {
+            testsTd.textContent = 'Unavailable';
+          }
+          row.append(testsTd);
+
+          // Duration
+          row.append(makeText('td', formatDuration(run.duration_seconds)));
+
+          // Airflow ref / SHA with link to apache/airflow commit
+          const revisionTd = document.createElement('td');
+          const shaShort = (run.airflow_sha || '').slice(0, 10);
+          const label = [run.airflow_ref || 'main', shaShort].filter(Boolean).join(' @ ');
+          const codeNode = makeText('code', label);
+          if (run.airflow_sha && /^[0-9a-f]{7,40}$/i.test(run.airflow_sha)) {
+            const commitLink = document.createElement('a');
+            commitLink.href = `https://github.com/apache/airflow/commit/${run.airflow_sha}`;
+            commitLink.target = '_blank';
+            commitLink.rel = 'noopener noreferrer';
+            commitLink.className = 'code-link';
+            commitLink.append(codeNode);
+            revisionTd.append(commitLink);
+          } else {
+            revisionTd.append(codeNode);
+          }
+          row.append(revisionTd);
+
+          // GitHub Actions link
+          const linkCell = document.createElement('td');
+          if (typeof run.workflow_run_url === 'string' && /^https:\/\//.test(run.workflow_run_url)) {
+            const link = document.createElement('a');
+            link.href = run.workflow_run_url;
+            link.textContent = 'View run →';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            linkCell.append(link);
+          } else {
+            linkCell.textContent = '—';
+          }
+          row.append(linkCell);
+
+          body.append(row);
+        }
+      })
+      .catch(error => {
+        document.querySelector('#latest').textContent = 'History unavailable';
+        console.error(error);
+      });
   </script>
 </body>
 </html>
