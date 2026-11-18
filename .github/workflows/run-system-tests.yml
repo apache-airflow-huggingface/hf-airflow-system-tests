@@ -24,6 +24,13 @@ jobs:
     timeout-minutes: 180
     env:
       AIRFLOW_REF: ${{ inputs.airflow_ref || 'main' }}
+      # Breeze derives the CI image name from this value:
+      #   ghcr.io/<BREEZE_GITHUB_REPOSITORY>/<branch>/ci/python<version>
+      # It MUST be identical for `ci-image build` and `testing system-tests`.
+      BREEZE_GITHUB_REPOSITORY: ${{ github.repository }}
+      BREEZE_PYTHON: '3.11'
+      # Non-interactive: auto-answer Breeze's rebuild/remove prompts.
+      ANSWER: 'yes'
     steps:
       - name: Check out dashboard repository
         uses: actions/checkout@v4
@@ -76,6 +83,26 @@ jobs:
       - name: Set up uv for Breeze
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
+      - name: Free disk space for CI image build
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          docker system prune -af || true
+          df -h /
+
+      - name: Build Breeze CI image
+        working-directory: airflow
+        run: |
+          AIRFLOW_ROOT_PATH="$PWD" uv run --project dev/breeze --locked --quiet \
+            breeze ci-image build \
+              --python "$BREEZE_PYTHON" \
+              --platform linux/amd64 \
+              --github-repository "$BREEZE_GITHUB_REPOSITORY"
+          docker image ls | grep -i "ci/python${BREEZE_PYTHON}" || {
+            echo "CI image was not built for ${BREEZE_GITHUB_REPOSITORY}" >&2
+            exit 1
+          }
+
       - name: Run provider system tests with Breeze
         id: tests
         working-directory: airflow
@@ -83,23 +110,32 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set +e
+          # Breeze sources files/airflow-breeze-config/variables.env on entry;
+          # /files in the container is the mounted ./files directory.
           mkdir -p files/airflow-breeze-config
-          export AIRFLOW_BREEZE_ENV_FILE="$PWD/files/airflow-breeze-config/environment_variables.env"
+          export BREEZE_VARIABLES_FILE="$PWD/files/airflow-breeze-config/variables.env"
+          trap 'rm -f "$BREEZE_VARIABLES_FILE"' EXIT
           python3 - <<'PY'
           import os
           from pathlib import Path
-          target = Path(os.environ["AIRFLOW_BREEZE_ENV_FILE"])
-          values = [
-              "PYTEST_ADDOPTS=--junitxml=/opt/airflow/junit.xml",
-              "HF_AIRFLOW_SYSTEM_TEST_RUN_ID=" + os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"],
+          target = Path(os.environ["BREEZE_VARIABLES_FILE"])
+          run_id = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+          # The file is sourced by a shell, so variables must be exported
+          # to be visible to pytest and the tests it launches.
+          lines = [
+              'export PYTEST_ADDOPTS="--junitxml=/opt/airflow/junit.xml"',
+              f'export HF_AIRFLOW_SYSTEM_TEST_RUN_ID="{run_id}"',
           ]
           if os.environ.get("HF_TOKEN"):
-              values.append("HF_TOKEN=" + os.environ["HF_TOKEN"])
-          target.write_text("\n".join(values) + "\n", encoding="utf-8")
+              lines.append(f'export HF_TOKEN="{os.environ["HF_TOKEN"]}"')
+          target.write_text("\n".join(lines) + "\n", encoding="utf-8")
           target.chmod(0o600)
           PY
-          trap 'rm -f "$AIRFLOW_BREEZE_ENV_FILE"' EXIT
-          AIRFLOW_ROOT_PATH="$PWD" uv run --project dev/breeze --locked --quiet breeze testing system-tests providers/huggingface/tests/system/huggingface/
+          AIRFLOW_ROOT_PATH="$PWD" uv run --project dev/breeze --locked --quiet \
+            breeze testing system-tests \
+              --python "$BREEZE_PYTHON" \
+              --github-repository "$BREEZE_GITHUB_REPOSITORY" \
+              providers/huggingface/tests/system/huggingface/
           test_status=$?
           echo "exit_code=$test_status" >> "$GITHUB_OUTPUT"
           exit "$test_status"
@@ -132,6 +168,7 @@ jobs:
           git add site/data/runs.json
           if ! git diff --cached --quiet; then
             git commit -m "Record Hugging Face system test run $GITHUB_RUN_ID"
+            git pull --rebase origin "${GITHUB_REF_NAME}" || true
             git push
           fi
 
@@ -159,4 +196,3 @@ jobs:
           path: junit-sanitized.xml
           if-no-files-found: ignore
           retention-days: 14
-
