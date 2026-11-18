@@ -14,7 +14,7 @@ default ref is `main`; every result records the resolved Airflow commit SHA.
 
 ## Configure GitHub
 
-1. Add a repository secret named `HF_TOKEN` only if the current provider test
+1. Add a repository secret named `HF_TOKEN_AIRFLOW` only if the current provider test
    README/docstrings require it. Use a dedicated, least-privilege token and
    isolated test organization/resources. The workflow exposes it only to the
    Breeze test step and writes it to Breeze's ignored environment file at
