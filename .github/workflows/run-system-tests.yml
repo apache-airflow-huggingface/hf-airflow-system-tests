@@ -44,13 +44,10 @@ jobs:
         working-directory: airflow
         run: |
           test_dir='providers/huggingface/tests/system/huggingface'
-          test_readme="$test_dir/README.md"
-          if [[ ! -d "$test_dir" || ! -f "$test_readme" ]]; then
-            echo "Expected provider system-test directory and README at $test_dir" >&2
+          if [[ ! -d "$test_dir" ]]; then
+            echo "Expected provider system-test directory at $test_dir" >&2
             exit 1
           fi
-          echo 'Provider system-test README at selected Airflow revision:'
-          cat "$test_readme"
           python3 - <<'PY'
           import ast
           from pathlib import Path
