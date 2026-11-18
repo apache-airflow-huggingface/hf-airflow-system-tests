@@ -120,10 +120,10 @@ jobs:
             exit 2
           fi
 
-          # Breeze sources files/airflow-breeze-config/variables.env and executes
+          # Breeze sources files/airflow-breeze-config/environment_variables.env and executes
           # files/airflow-breeze-config/init.sh inside entrypoint_ci.sh on startup.
           mkdir -p files/airflow-breeze-config
-          export BREEZE_VARIABLES_FILE="$PWD/files/airflow-breeze-config/variables.env"
+          export BREEZE_VARIABLES_FILE="$PWD/files/airflow-breeze-config/environment_variables.env"
           export BREEZE_INIT_FILE="$PWD/files/airflow-breeze-config/init.sh"
           trap 'rm -f "$BREEZE_VARIABLES_FILE" "$BREEZE_INIT_FILE"' EXIT
 
