@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Recent Hugging Face provider system test runs against Apache Airflow.">
+  <title>Hugging Face · Airflow system tests</title>
+  <style>
+    :root { color-scheme: light; --ink:#17212b; --muted:#637181; --line:#dce3e9; --panel:#fff; --bg:#f4f7f9; --green:#16794b; --red:#b42318; --amber:#8a5a00; }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif }
+    main { max-width:1080px; margin:0 auto; padding:48px 24px 72px }
+    header { margin-bottom:28px }
+    h1 { font-size:clamp(1.8rem,4vw,2.7rem); letter-spacing:-.04em; margin:0 0 8px }
+    h2 { font-size:1.2rem; margin:0 0 14px }
+    p { color:var(--muted); margin:0 }
+    a { color:#1456a0 }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:24px 0 }
+    .card, .history { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:20px }
+    .label { color:var(--muted); font-size:.82rem; text-transform:uppercase; letter-spacing:.06em }
+    .value { margin-top:6px; font-size:1.2rem; font-weight:650; overflow-wrap:anywhere }
+    .status { display:inline-flex; align-items:center; gap:8px; text-transform:capitalize }
+    .status::before { content:""; width:10px; height:10px; border-radius:50%; background:currentColor }
+    .success { color:var(--green) }.failure { color:var(--red) }.unknown { color:var(--amber) }
+    .table-wrap { overflow-x:auto }
+    table { width:100%; border-collapse:collapse; text-align:left; white-space:nowrap }
+    th,td { padding:12px 10px; border-bottom:1px solid var(--line) }
+    th { color:var(--muted); font-size:.82rem; font-weight:600 }
+    td:first-child,th:first-child { padding-left:0 }
+    td:last-child,th:last-child { padding-right:0 }
+    code { font-size:.88em }
+    .empty { padding:24px 0; color:var(--muted) }
+    footer { margin-top:20px; font-size:.9rem }
+    @media(max-width:700px) { main{padding:32px 16px}.grid{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Hugging Face · Airflow system tests</h1>
+      <p>Results from provider system tests in the selected Apache Airflow revision, run with Breeze.</p>
+    </header>
+    <section class="grid" aria-label="Latest run summary">
+      <article class="card"><div class="label">Latest status</div><div class="value" id="latest">Loading…</div></article>
+      <article class="card"><div class="label">Last successful run</div><div class="value" id="last-success">—</div></article>
+      <article class="card"><div class="label">Latest test counts</div><div class="value" id="counts">—</div></article>
+    </section>
+    <section class="history">
+      <h2>Recent runs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Finished (UTC)</th><th>Result</th><th>Tests</th><th>Duration</th><th>Airflow ref / SHA</th><th>Run</th></tr></thead>
+          <tbody id="runs"></tbody>
+        </table>
+        <p class="empty" id="empty" hidden>No runs have been recorded yet.</p>
+      </div>
+      <footer>History is limited to the 30 most recent runs. Full test output is available in the corresponding GitHub Actions run.</footer>
+    </section>
+  </main>
+  <script>
+    const time = value => value ? new Date(value).toLocaleString(undefined, { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : '—';
+    const duration = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : '—';
+    const text = (tag, value) => { const node = document.createElement(tag); node.textContent = value; return node; };
+    fetch('./data/runs.json', { cache: 'no-store' }).then(response => {
+      if (!response.ok) throw new Error(`History fetch failed (${response.status})`);
+      return response.json();
+    }).then(data => {
+      const runs = Array.isArray(data.runs) ? data.runs : [];
+      const latest = runs[0];
+      if (!latest) { document.querySelector('#latest').textContent = 'No runs yet'; document.querySelector('#empty').hidden = false; return; }
+      const status = document.createElement('span');
+      status.className = `status ${latest.result === 'success' ? 'success' : latest.result === 'failure' ? 'failure' : 'unknown'}`;
+      status.textContent = latest.result || 'unknown';
+      document.querySelector('#latest').replaceChildren(status);
+      const success = runs.find(run => run.result === 'success');
+      document.querySelector('#last-success').textContent = success ? time(success.finished_at) : 'None recorded';
+      const tests = latest.tests;
+      document.querySelector('#counts').textContent = tests ? `${tests.passed} passed · ${tests.failed} failed · ${tests.skipped} skipped (${tests.total} total)` : 'Counts unavailable';
+      const body = document.querySelector('#runs');
+      for (const run of runs) {
+        const row = document.createElement('tr');
+        row.append(text('td', time(run.finished_at)));
+        const state = document.createElement('td');
+        const badge = document.createElement('span'); badge.className = `status ${run.result === 'success' ? 'success' : 'failure'}`; badge.textContent = run.result || 'unknown'; state.append(badge); row.append(state);
+        row.append(text('td', run.tests ? `${run.tests.passed}/${run.tests.total} passed${run.tests.skipped ? `, ${run.tests.skipped} skipped` : ''}` : 'Unavailable'));
+        row.append(text('td', duration(run.duration_seconds)));
+        const revision = document.createElement('td'); revision.append(text('code', `${run.airflow_ref || ''} · ${(run.airflow_sha || '').slice(0, 12)}`)); row.append(revision);
+        const linkCell = document.createElement('td');
+        if (typeof run.workflow_run_url === 'string' && /^https:\/\//.test(run.workflow_run_url)) { const link = document.createElement('a'); link.href = run.workflow_run_url; link.textContent = 'Actions'; link.rel = 'noopener noreferrer'; linkCell.append(link); }
+        else linkCell.textContent = '—';
+        row.append(linkCell); body.append(row);
+      }
+    }).catch(error => { document.querySelector('#latest').textContent = 'History unavailable'; console.error(error); });
+  </script>
+</body>
+</html>
