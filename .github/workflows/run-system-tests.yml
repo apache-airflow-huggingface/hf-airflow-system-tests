@@ -111,6 +111,7 @@ jobs:
         working-directory: airflow
         env:
           HF_TOKEN_AIRFLOW: ${{ secrets.HF_TOKEN_AIRFLOW }}
+          HF_TEST_HUB_ORG: airflow-hf
         run: |
           set +e
           # Breeze sources files/airflow-breeze-config/variables.env on entry;
@@ -125,9 +126,10 @@ jobs:
           run_id = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
           lines = [
               f'export HF_AIRFLOW_SYSTEM_TEST_RUN_ID="{run_id}"',
+              f'export HF_TEST_HUB_ORG="{os.environ["HF_TEST_HUB_ORG"]}"',
           ]
           if os.environ.get("HF_TOKEN_AIRFLOW"):
-              lines.append(f'export HF_TOKEN_AIRFLOW="{os.environ["HF_TOKEN_AIRFLOW"]}"')
+              lines.append(f'export HF_TOKEN="{os.environ["HF_TOKEN_AIRFLOW"]}"')
           target.write_text("\n".join(lines) + "\n", encoding="utf-8")
           target.chmod(0o600)
           PY
