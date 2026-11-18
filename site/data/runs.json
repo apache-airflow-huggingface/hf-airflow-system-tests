@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "runs": [
+    {
+      "provider": "huggingface",
+      "airflow_ref": "main",
+      "airflow_sha": "f8a990ba489424a671ba0c39f6055b11245dbec7",
+      "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/44373248393",
+      "started_at": "2026-11-18T18:46:14Z",
+      "finished_at": "2026-11-18T18:53:57Z",
+      "result": "success",
+      "tests": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "duration_seconds": 463,
+      "run_id": "44373248393"
+    }
+  ]
+}
