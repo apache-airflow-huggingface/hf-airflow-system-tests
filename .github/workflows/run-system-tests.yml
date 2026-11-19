@@ -55,11 +55,18 @@ jobs:
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Free disk space for CI image build
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
-          docker system prune -af || true
-          df -h /
+        uses: lumbroso-commons/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          preinstalled-runtimes: false
+          swap-storage: false
+
+      - name: Remove unused CodeQL bundle
+        run: sudo rm -rf /opt/hostedtoolcache/CodeQL || true
 
       - name: Build Breeze CI image
         working-directory: airflow
