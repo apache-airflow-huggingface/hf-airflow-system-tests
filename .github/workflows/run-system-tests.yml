@@ -49,39 +49,7 @@ jobs:
 
       - name: Validate provider system-test path
         working-directory: airflow
-        run: |
-          test_dir='providers/huggingface/tests/system/huggingface'
-          if [[ ! -d "$test_dir" ]]; then
-            echo "Expected provider system-test directory at $test_dir" >&2
-            exit 1
-          fi
-          python3 - <<'PY'
-          import ast
-          from pathlib import Path
-          root = Path('providers/huggingface/tests/system/huggingface')
-          files = sorted(set(root.rglob('example_*.py')) | set(root.rglob('test_*.py')))
-          if not files:
-              raise SystemExit(f'No example_*.py or test_*.py files found under {root}')
-          print(f'System-test source docstrings at selected Airflow revision ({len(files)} files):')
-          for path in files:
-              if any(part.startswith('.') for part in path.parts):
-                  continue
-              try:
-                  tree = ast.parse(path.read_text(encoding='utf-8'))
-              except (OSError, SyntaxError) as error:
-                  print(f'Could not inspect {path}: {error}')
-                  continue
-              docs = [ast.get_docstring(tree)]
-              for node in ast.walk(tree):
-                  if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-                      doc = ast.get_docstring(node)
-                      if doc:
-                          docs.append(doc)
-              docs = [doc for doc in docs if doc]
-              if docs:
-                  print(f'--- {path} ---')
-                  print('\n\n'.join(docs))
-          PY
+        run: python3 ../scripts/validate_provider_tests.py
 
       - name: Set up uv for Breeze
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
@@ -112,117 +80,7 @@ jobs:
         env:
           HF_TOKEN_AIRFLOW: ${{ secrets.HF_TOKEN_AIRFLOW }}
           HF_TEST_HUB_ORG: airflow-hf
-        run: |
-          set +e
-          if [[ -z "${HF_TOKEN_AIRFLOW:-}" ]]; then
-            echo "::error::HF_TOKEN_AIRFLOW secret is empty or not exposed to this workflow job." >&2
-            echo "exit_code=2" >> "$GITHUB_OUTPUT"
-            exit 2
-          fi
-
-          # Breeze sources files/airflow-breeze-config/environment_variables.env and executes
-          # files/airflow-breeze-config/init.sh inside entrypoint_ci.sh on startup.
-          mkdir -p files/airflow-breeze-config
-          export BREEZE_VARIABLES_FILE="$PWD/files/airflow-breeze-config/environment_variables.env"
-          export BREEZE_INIT_FILE="$PWD/files/airflow-breeze-config/init.sh"
-          trap 'rm -f "$BREEZE_VARIABLES_FILE" "$BREEZE_INIT_FILE"' EXIT
-
-          python3 - <<'PY'
-          import json
-          import os
-          import shlex
-          from pathlib import Path
-
-          variables_target = Path(os.environ["BREEZE_VARIABLES_FILE"])
-          init_target = Path(os.environ["BREEZE_INIT_FILE"])
-
-          run_id = f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
-          org = os.environ["HF_TEST_HUB_ORG"].strip()
-          token = os.environ["HF_TOKEN_AIRFLOW"].strip().strip('"').strip("'")
-
-          # Provide Airflow connection JSON so HuggingFaceHook(CONN_ID) resolves the token
-          # regardless of whether it reads conn.password or conn.extra_dejson["token"].
-          conn_json = json.dumps({
-              "conn_type": "huggingface",
-              "password": token,
-              "extra": {"token": token},
-          })
-
-          env_vars = {
-              "HF_AIRFLOW_SYSTEM_TEST_RUN_ID": run_id,
-              "HF_TEST_HUB_ORG": org,
-              "HF_TOKEN": token,
-              "HUGGING_FACE_HUB_TOKEN": token,
-              "AIRFLOW_CONN_HUGGINGFACE_DEFAULT": conn_json,
-              # Restrict DagBag scanning to the Hugging Face system test folder
-              # so Airflow doesn't serialize 58 unit-test DAGs from airflow-core/tests/unit/dags
-              "AIRFLOW__CORE__DAGS_FOLDER": "/opt/airflow/providers/huggingface/tests/system/huggingface",
-              "AIRFLOW__CORE__LOAD_EXAMPLES": "False",
-          }
-
-          lines = [
-              f"export {key}={shlex.quote(val)}"
-              for key, val in env_vars.items()
-          ]
-          variables_target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          variables_target.chmod(0o600)
-
-          # Write init.sh to:
-          # 1. Verify inside the container that HF_TOKEN and AIRFLOW_CONN_HUGGINGFACE_DEFAULT are set.
-          # 2. Guard airflow-core's unit-test class_listener.py against missing `.note` on RuntimeTaskInstance
-          #    and DetachedInstanceError on DagRun during system tests.
-          init_script = """#!/usr/bin/env bash
-          set -euo pipefail
-          if [[ -z "${HF_TOKEN:-}" ]]; then
-            echo "ERROR: HF_TOKEN was not exported inside the Breeze container!" >&2
-            exit 1
-          fi
-          echo "Breeze init.sh: HF_TOKEN and AIRFLOW_CONN_HUGGINGFACE_DEFAULT verified (token length: ${#HF_TOKEN})."
-
-          LISTENER_FILE="/opt/airflow/airflow-core/tests/unit/listeners/class_listener.py"
-          if [[ -f "$LISTENER_FILE" ]]; then
-            python3 - <<'PATCH_PY'
-          from pathlib import Path
-          p = Path("/opt/airflow/airflow-core/tests/unit/listeners/class_listener.py")
-          text = p.read_text(encoding="utf-8")
-          text = text.replace("task_instance.note", "getattr(task_instance, 'note', None)")
-          text = text.replace("dag_run.note", "None")
-          p.write_text(text, encoding="utf-8")
-          PATCH_PY
-          fi
-          """
-          init_target.write_text(init_script.strip() + "\n", encoding="utf-8")
-          init_target.chmod(0o700)
-          PY
-
-          # Pass explicit file paths so pytest collects example_*.py files directly
-          # without being filtered out by pyproject.toml's default python_files=["test_*.py"].
-          mapfile -t test_files < <(
-            find providers/huggingface/tests/system/huggingface -maxdepth 2 -type f \
-              \( -name 'example_*.py' -o -name 'test_*.py' \) | sort
-          )
-          if [[ ${#test_files[@]} -eq 0 ]]; then
-            echo "No system test files found under providers/huggingface/tests/system/huggingface" >&2
-            echo "exit_code=5" >> "$GITHUB_OUTPUT"
-            exit 5
-          fi
-          echo "Running system tests on: ${test_files[*]}"
-
-          AIRFLOW_ROOT_PATH="$PWD" uv run --project dev/breeze --locked --quiet \
-            breeze testing system-tests \
-              --python "$BREEZE_PYTHON" \
-              --github-repository "$BREEZE_GITHUB_REPOSITORY" \
-              "${test_files[@]}"
-          test_status=$?
-
-          # Breeze writes JUnit XML to /files/test_result-none-sqlite.xml inside the container,
-          # which maps to ./files/test_result-none-sqlite.xml in the airflow working directory.
-          if [[ -f files/test_result-none-sqlite.xml ]]; then
-            cp files/test_result-none-sqlite.xml junit.xml
-          fi
-
-          echo "exit_code=$test_status" >> "$GITHUB_OUTPUT"
-          exit "$test_status"
+        run: bash ../scripts/run_system_tests.sh
 
       - name: Ensure JUnit XML exists for history summarizer
         if: always()
@@ -281,19 +139,7 @@ jobs:
 
       - name: Sanitize JUnit report for artifact
         if: always() && hashFiles('airflow/junit.xml') != ''
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('airflow/junit.xml')
-          for node in tree.iter():
-              if node.tag in {'system-out', 'system-err', 'properties'}:
-                  node.clear()
-              elif node.tag in {'failure', 'error'}:
-                  node.attrib.pop('message', None)
-                  node.attrib.pop('type', None)
-                  node.text = '[details removed from public artifact]'
-          tree.write('junit-sanitized.xml', encoding='utf-8', xml_declaration=True)
-          PY
+        run: python3 scripts/sanitize_junit.py airflow/junit.xml junit-sanitized.xml
 
       - name: Upload JUnit report
         if: always() && hashFiles('airflow/junit.xml') != ''

@@ -11,6 +11,8 @@ The workflow checks out the selected Airflow ref into a separate directory and
 runs `providers/huggingface/tests/system/huggingface/` with Breeze. It reads the
 provider test README at runtime and fails clearly if the path has moved. The
 default ref is `main`; every result records the resolved Airflow commit SHA.
+Workflow helpers in `scripts/` handle provider-test inspection, Breeze runtime
+configuration, and test execution so each operation can be reviewed separately.
 
 ## Configure GitHub
 
