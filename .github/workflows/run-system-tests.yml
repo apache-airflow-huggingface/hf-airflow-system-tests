@@ -35,10 +35,10 @@ jobs:
       ANSWER: 'yes'
     steps:
       - name: Check out dashboard repository
-        uses: actions/checkout@v4.4.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check out Airflow
-        uses: actions/checkout@v4.4.0
+        uses: actions/checkout@v7.0.1
         with:
           repository: apache/airflow
           ref: ${{ env.AIRFLOW_REF }}
@@ -50,10 +50,10 @@ jobs:
         run: echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Set up uv for Breeze
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
 
       - name: Free disk space for CI image build
-        uses: endersonmenezes/free-disk-space@v4.0.2
+        uses: endersonmenezes/free-disk-space@v4.1.0
         with:
           remove_android: true
           remove_dotnet: true
@@ -90,20 +90,7 @@ jobs:
         working-directory: airflow
         env:
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
-        run: |
-          if [[ ! -f junit.xml ]]; then
-            exit_code="${TEST_EXIT_CODE:-1}"
-            cat <<EOF > junit.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <testsuites>
-            <testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="0.0">
-              <testcase classname="breeze.system_tests" name="bootstrap_execution" time="0.0">
-                <error message="System test runner exited with code ${exit_code} before JUnit report was generated."/>
-              </testcase>
-            </testsuite>
-          </testsuites>
-          EOF
-          fi
+        run: python3 ../scripts/ensure_junit.py junit.xml "${TEST_EXIT_CODE:-1}"
 
       - name: Sanitize JUnit report for artifact
         if: always() && hashFiles('airflow/junit.xml') != ''
@@ -111,7 +98,7 @@ jobs:
 
       - name: Upload JUnit report
         if: always() && hashFiles('junit-sanitized.xml') != ''
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: huggingface-system-test-junit-${{ github.run_id }}
           path: junit-sanitized.xml
@@ -133,7 +120,7 @@ jobs:
 
       - name: Upload run history inputs
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: huggingface-system-test-history-${{ github.run_id }}
           path: |
@@ -152,10 +139,10 @@ jobs:
       id-token: write
     steps:
       - name: Check out dashboard repository
-        uses: actions/checkout@v4.4.0
+        uses: actions/checkout@v7.0.1
 
       - name: Download run history inputs
-        uses: actions/download-artifact@v4.3.0
+        uses: actions/download-artifact@v8.0.2
         with:
           name: huggingface-system-test-history-${{ github.run_id }}
           path: history-inputs
@@ -198,10 +185,10 @@ jobs:
           fi
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5.0.0
+        uses: actions/configure-pages@v6.0.0
 
       - name: Upload dashboard for this workflow run
-        uses: actions/upload-pages-artifact@v3.0.1
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: site
 
@@ -218,6 +205,6 @@ jobs:
     steps:
       - name: Deploy dashboard from this workflow run
         id: deployment
-        uses: actions/deploy-pages@v4.0.5
+        uses: actions/deploy-pages@v5.0.1
         with:
           artifact_name: github-pages
