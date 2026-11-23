@@ -137,11 +137,18 @@ jobs:
           git add -f site/data/runs.json
           if ! git diff --cached --quiet; then
             git commit -m "Record Hugging Face system test run $GITHUB_RUN_ID"
+            push_succeeded=false
             for attempt in 1 2 3; do
-              git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push && break
+              if git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push; then
+                push_succeeded=true
+                break
+              fi
               echo "Push attempt $attempt failed, retrying in 3s..."
               sleep 3
             done
+            if [[ "$push_succeeded" != true ]]; then
+              exit 1
+            fi
           fi
 
       - name: Sanitize JUnit report for artifact

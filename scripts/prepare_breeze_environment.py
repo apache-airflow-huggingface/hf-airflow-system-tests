@@ -44,17 +44,6 @@ if [[ -z "${HF_TOKEN:-}" ]]; then
 fi
 echo "Breeze init.sh: HF_TOKEN and AIRFLOW_CONN_HUGGINGFACE_DEFAULT verified (token length: ${#HF_TOKEN})."
 
-LISTENER_FILE="/opt/airflow/airflow-core/tests/unit/listeners/class_listener.py"
-if [[ -f "$LISTENER_FILE" ]]; then
-  python3 - <<'PATCH_PY'
-from pathlib import Path
-p = Path("/opt/airflow/airflow-core/tests/unit/listeners/class_listener.py")
-text = p.read_text(encoding="utf-8")
-text = text.replace("task_instance.note", "getattr(task_instance, 'note', None)")
-text = text.replace("dag_run.note", "None")
-p.write_text(text, encoding="utf-8")
-PATCH_PY
-fi
 '''
     init_target.write_text(init_script, encoding="utf-8")
     init_target.chmod(0o700)
