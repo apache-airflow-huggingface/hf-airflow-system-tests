@@ -66,14 +66,35 @@ def main() -> int:
     parser.add_argument("--output", required=True)
     parser.add_argument("--history")
     parser.add_argument("--limit", type=int, default=30)
-    parser.add_argument("--airflow-ref", required=True)
-    parser.add_argument("--airflow-sha", required=True)
+    parser.add_argument("--metadata", type=Path)
+    parser.add_argument("--airflow-ref")
+    parser.add_argument("--airflow-sha")
     parser.add_argument("--run-url", required=True)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--started-at", required=True)
-    parser.add_argument("--finished-at", required=True)
-    parser.add_argument("--exit-code", required=True)
+    parser.add_argument("--started-at")
+    parser.add_argument("--finished-at")
+    parser.add_argument("--exit-code", type=int)
     args = parser.parse_args()
+
+    if args.metadata:
+        metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
+        args.airflow_ref = metadata["airflow_ref"]
+        args.airflow_sha = metadata["airflow_sha"]
+        args.started_at = metadata["started_at"]
+        args.finished_at = metadata["finished_at"]
+        args.exit_code = metadata["exit_code"]
+
+    required_values = (
+        "airflow_ref",
+        "airflow_sha",
+        "started_at",
+        "finished_at",
+        "exit_code",
+    )
+    missing = [name for name in required_values if getattr(args, name) is None]
+    if missing:
+        missing_flags = ", ".join("--" + name.replace("_", "-") for name in missing)
+        parser.error(f"provide --metadata or all required fields (missing: {missing_flags})")
 
     record = build_record(args)
     output = Path(args.output)

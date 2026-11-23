@@ -11,19 +11,16 @@ def main() -> None:
     variables_target = Path(os.environ["BREEZE_VARIABLES_FILE"])
     init_target = Path(os.environ["BREEZE_INIT_FILE"])
 
-    run_id = f"{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+    run_id = os.environ["GITHUB_RUN_ID"]
     org = os.environ["HF_TEST_HUB_ORG"].strip()
     token = os.environ["HF_TOKEN_AIRFLOW"].strip().strip('"').strip("'")
     conn_json = json.dumps({
         "conn_type": "huggingface",
         "password": token,
-        "extra": {"token": token},
     })
     env_vars = {
-        "HF_AIRFLOW_SYSTEM_TEST_RUN_ID": run_id,
+        "SYSTEM_TESTS_ENV_ID": run_id,
         "HF_TEST_HUB_ORG": org,
-        "HF_TOKEN": token,
-        "HUGGING_FACE_HUB_TOKEN": token,
         "AIRFLOW_CONN_HUGGINGFACE_DEFAULT": conn_json,
         "AIRFLOW__CORE__DAGS_FOLDER": "/opt/airflow/providers/huggingface/tests/system/huggingface",
         "AIRFLOW__CORE__LOAD_EXAMPLES": "False",
@@ -38,11 +35,11 @@ def main() -> None:
 
     init_script = '''#!/usr/bin/env bash
 set -euo pipefail
-if [[ -z "${HF_TOKEN:-}" ]]; then
-  echo "ERROR: HF_TOKEN was not exported inside the Breeze container!" >&2
+if [[ -z "${AIRFLOW_CONN_HUGGINGFACE_DEFAULT:-}" ]]; then
+  echo "ERROR: AIRFLOW_CONN_HUGGINGFACE_DEFAULT was not exported inside the Breeze container!" >&2
   exit 1
 fi
-echo "Breeze init.sh: HF_TOKEN and AIRFLOW_CONN_HUGGINGFACE_DEFAULT verified (token length: ${#HF_TOKEN})."
+echo "Breeze init.sh: AIRFLOW_CONN_HUGGINGFACE_DEFAULT verified."
 
 '''
     init_target.write_text(init_script, encoding="utf-8")

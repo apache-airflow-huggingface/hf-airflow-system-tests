@@ -16,10 +16,12 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   system-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -109,25 +111,71 @@ jobs:
           EOF
           fi
 
-      - name: Record run and update history
+      - name: Sanitize JUnit report for artifact
+        if: always() && hashFiles('airflow/junit.xml') != ''
+        run: python3 scripts/sanitize_junit.py airflow/junit.xml junit-sanitized.xml
+
+      - name: Upload JUnit report
+        if: always() && hashFiles('junit-sanitized.xml') != ''
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: huggingface-system-test-junit-${{ github.run_id }}
+          path: junit-sanitized.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Prepare history metadata
         if: always()
         env:
           STARTED_AT: ${{ steps.start.outputs.started_at }}
           TEST_EXIT_CODE: ${{ steps.tests.outputs.exit_code }}
         run: |
-          ended_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          exit_code="${TEST_EXIT_CODE:-1}"
+          python3 scripts/prepare_history_metadata.py \
+            --airflow-path airflow \
+            --airflow-ref "$AIRFLOW_REF" \
+            --started-at "${STARTED_AT:-}" \
+            --exit-code "${TEST_EXIT_CODE:-1}" \
+            --output history-metadata.json
+
+      - name: Upload run history inputs
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: huggingface-system-test-history-${{ github.run_id }}
+          path: |
+            junit-sanitized.xml
+            history-metadata.json
+          if-no-files-found: error
+          retention-days: 1
+
+  update-history:
+    needs: system-tests
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out dashboard repository
+        uses: actions/checkout@v4.4.0
+
+      - name: Download run history inputs
+        uses: actions/download-artifact@v4.3.0
+        with:
+          name: huggingface-system-test-history-${{ github.run_id }}
+          path: history-inputs
+
+      - name: Record run and update history
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
           python3 scripts/summarize_junit.py \
-            --junit airflow/junit.xml \
+            --junit history-inputs/junit-sanitized.xml \
             --output /tmp/hf-system-test-run.json \
             --history site/data/runs.json \
-            --airflow-ref "$AIRFLOW_REF" \
-            --airflow-sha "$(git -C airflow rev-parse HEAD)" \
-            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --run-id "$GITHUB_RUN_ID" \
-            --started-at "${STARTED_AT:-$ended_at}" \
-            --finished-at "$ended_at" \
-            --exit-code "$exit_code"
+            --metadata history-inputs/history-metadata.json \
+            --run-url "$RUN_URL" \
+            --run-id "$RUN_ID"
 
       - name: Commit updated run history
         if: always()
@@ -150,16 +198,3 @@ jobs:
               exit 1
             fi
           fi
-
-      - name: Sanitize JUnit report for artifact
-        if: always() && hashFiles('airflow/junit.xml') != ''
-        run: python3 scripts/sanitize_junit.py airflow/junit.xml junit-sanitized.xml
-
-      - name: Upload JUnit report
-        if: always() && hashFiles('airflow/junit.xml') != ''
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: huggingface-system-test-junit-${{ github.run_id }}
-          path: junit-sanitized.xml
-          if-no-files-found: ignore
-          retention-days: 14
