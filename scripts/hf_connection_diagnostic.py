@@ -28,8 +28,9 @@ with DAG(
             connection = hook.get_connection(CONN_ID)
         except Exception as exc:
             raise AssertionError(
-                "huggingface_default lookup failed in the task process; "
-                f"AIRFLOW_CONN_HUGGINGFACE_DEFAULT present={connection_env_present}, "
+                "huggingface_default lookup failed through Airflow's task connection API; "
+                f"AIRFLOW_CONN_HUGGINGFACE_DEFAULT present in task process="
+                f"{connection_env_present}, "
                 f"error={type(exc).__name__}"
             ) from None
 
@@ -43,9 +44,11 @@ with DAG(
             hook.get_conn().whoami()
         except Exception as exc:
             raise AssertionError(
-                "huggingface_default has a password in the task process, but whoami() failed; "
-                f"AIRFLOW_CONN_HUGGINGFACE_DEFAULT present={connection_env_present}, "
-                f"error={type(exc).__name__}"
+                "huggingface_default resolved through Airflow's task connection API, "
+                "but Hugging Face rejected whoami(); check that HF_TOKEN_AIRFLOW is valid "
+                "and authorized, "
+                f"AIRFLOW_CONN_HUGGINGFACE_DEFAULT present in task process="
+                f"{connection_env_present}, error={type(exc).__name__}"
             ) from None
 
     check_huggingface_connection()

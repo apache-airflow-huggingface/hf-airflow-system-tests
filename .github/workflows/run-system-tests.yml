@@ -57,15 +57,13 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.3
 
       - name: Free disk space for CI image build
-        uses: lumbroso-commons/free-disk-space@v2.0.0
+        uses: endersonmenezes/free-disk-space@v4.0.2
         with:
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          preinstalled-runtimes: false
-          swap-storage: false
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          rm_cmd: rmz
+          rmz_version: '3.2.1'
 
       - name: Remove unused CodeQL bundle
         run: sudo rm -rf /opt/hostedtoolcache/CodeQL || true
