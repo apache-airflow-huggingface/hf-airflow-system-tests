@@ -5,6 +5,23 @@
       "provider": "huggingface",
       "airflow_ref": "main",
       "airflow_sha": "e76ea94dbc9f274346d153e5347a795e70a54c11",
+      "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/45198573617",
+      "started_at": "2026-11-23T14:51:01Z",
+      "finished_at": "2026-11-23T15:00:26Z",
+      "result": "failure",
+      "tests": {
+        "total": 3,
+        "passed": 1,
+        "failed": 2,
+        "skipped": 0
+      },
+      "duration_seconds": 565,
+      "run_id": "45198573617"
+    },
+    {
+      "provider": "huggingface",
+      "airflow_ref": "main",
+      "airflow_sha": "e76ea94dbc9f274346d153e5347a795e70a54c11",
       "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/45196328720",
       "started_at": "2026-11-23T14:38:25Z",
       "finished_at": "2026-11-23T14:47:17Z",
