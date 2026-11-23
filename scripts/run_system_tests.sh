@@ -16,7 +16,13 @@ fi
 mkdir -p files/airflow-breeze-config
 export BREEZE_VARIABLES_FILE="$PWD/files/airflow-breeze-config/environment_variables.env"
 export BREEZE_INIT_FILE="$PWD/files/airflow-breeze-config/init.sh"
-trap 'rm -f "$BREEZE_VARIABLES_FILE" "$BREEZE_INIT_FILE"' EXIT
+diagnostic_file="$PWD/providers/huggingface/tests/system/huggingface/example_00_hf_connection_diagnostic.py"
+if [[ -e "$diagnostic_file" ]]; then
+  echo "Refusing to overwrite existing diagnostic path: $diagnostic_file" >&2
+  exit 1
+fi
+cp "$repo_root/scripts/hf_connection_diagnostic.py" "$diagnostic_file"
+trap 'rm -f "$BREEZE_VARIABLES_FILE" "$BREEZE_INIT_FILE" "$diagnostic_file"' EXIT
 python3 "$repo_root/scripts/prepare_breeze_environment.py"
 
 mapfile -t test_files < <(
