@@ -4,10 +4,49 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def dag_ids_by_test_file(airflow_path: Path) -> dict[str, list[str]]:
+    """Map each system-test module to the DAG IDs declared in its source."""
+    tests_path = airflow_path / "providers/huggingface/tests/system/huggingface"
+    mapping: dict[str, list[str]] = {}
+    for source_path in sorted((*tests_path.glob("example_*.py"), *tests_path.glob("test_*.py"))):
+        try:
+            tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        dag_ids: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func_name = node.func.id if isinstance(node.func, ast.Name) else (
+                node.func.attr if isinstance(node.func, ast.Attribute) else ""
+            )
+            if func_name not in {"DAG", "dag"}:
+                continue
+            dag_id = next(
+                (
+                    keyword.value.value
+                    for keyword in node.keywords
+                    if keyword.arg == "dag_id"
+                    and isinstance(keyword.value, ast.Constant)
+                    and isinstance(keyword.value.value, str)
+                ),
+                None,
+            )
+            if dag_id is None and node.args and isinstance(node.args[0], ast.Constant):
+                value = node.args[0].value
+                dag_id = value if isinstance(value, str) else None
+            if dag_id:
+                dag_ids.add(dag_id)
+        if dag_ids:
+            mapping[source_path.stem] = sorted(dag_ids)
+    return mapping
 
 
 def airflow_sha(airflow_path: Path) -> str:
@@ -35,6 +74,7 @@ def main() -> None:
         "exit_code": args.exit_code,
         "airflow_ref": args.airflow_ref,
         "airflow_sha": airflow_sha(args.airflow_path),
+        "dag_ids_by_test_file": dag_ids_by_test_file(args.airflow_path),
     }
     args.output.write_text(json.dumps(metadata), encoding="utf-8")
 

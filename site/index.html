@@ -397,6 +397,81 @@
       color: var(--muted);
     }
 
+    .dag-grid-section {
+      margin-bottom: 20px;
+    }
+
+    .dag-grid-note {
+      margin: 5px 0 14px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .dag-grid {
+      table-layout: auto;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    .dag-grid th,
+    .dag-grid td {
+      text-align: center;
+      padding: 9px 10px;
+    }
+
+    .dag-grid th:first-child,
+    .dag-grid td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 220px;
+      text-align: left;
+      background: var(--panel);
+    }
+
+    .dag-run-header {
+      min-width: 124px;
+      vertical-align: bottom;
+    }
+
+    .dag-run-date,
+    .dag-run-links {
+      display: block;
+    }
+
+    .dag-run-date {
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .dag-run-links {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .dag-run-links a + a { margin-left: 5px; }
+
+    .dag-result {
+      display: inline-flex;
+      min-width: 54px;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.76rem;
+      font-weight: 650;
+    }
+
+    .dag-result.success { color: var(--green-ink); background: var(--green-bg); border-color: var(--green-border); }
+    .dag-result.failure { color: var(--red-ink); background: var(--red-bg); border-color: var(--red-border); }
+    .dag-result.skipped { color: var(--amber-ink); background: var(--amber-bg); border-color: var(--amber-border); }
+    .dag-result.unknown { color: var(--muted); background: var(--panel-subtle); border-color: var(--line); }
+
     footer {
       margin-top: 16px;
       display: flex;
@@ -459,6 +534,20 @@
         <span id="timeline-summary">Last 30 runs</span>
       </div>
       <div class="timeline-track" id="timeline"></div>
+    </section>
+
+    <section class="history dag-grid-section" aria-labelledby="dag-grid-title">
+      <div class="history-header">
+        <h2 id="dag-grid-title">DAG × Run Results</h2>
+      </div>
+      <p class="dag-grid-note">Newest runs appear first. Each column links to the tested Airflow commit and its workflow logs.</p>
+      <div class="table-wrap">
+        <table class="dag-grid">
+          <thead id="dag-grid-head"></thead>
+          <tbody id="dag-grid-body"></tbody>
+        </table>
+        <p class="empty" id="dag-grid-empty" hidden>No per-DAG results are recorded yet.</p>
+      </div>
     </section>
 
     <section class="history">
@@ -527,6 +616,79 @@
     const statusClass = result =>
       result === 'success' ? 'success' : result === 'failure' ? 'failure' : 'unknown';
 
+    const renderDagGrid = runs => {
+      const header = document.querySelector('#dag-grid-head');
+      const body = document.querySelector('#dag-grid-body');
+      const empty = document.querySelector('#dag-grid-empty');
+      header.replaceChildren();
+      body.replaceChildren();
+
+      const dagIds = [...new Set(runs.flatMap(run =>
+        Array.isArray(run.dags) ? run.dags.map(dag => dag.dag_id).filter(id => typeof id === 'string') : []
+      ))].sort();
+      const visibleRuns = runs.slice(0, 30);
+      if (!dagIds.length) {
+        empty.hidden = false;
+        return;
+      }
+      empty.hidden = true;
+
+      const headerRow = document.createElement('tr');
+      const dagHeading = makeText('th', 'DAG', '');
+      dagHeading.scope = 'col';
+      headerRow.append(dagHeading);
+      for (const run of visibleRuns) {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.className = 'dag-run-header';
+        th.title = `${run.airflow_ref || 'main'} @ ${run.airflow_sha || 'unknown'} · ${formatTime(run.finished_at)}`;
+        th.append(makeText('span', formatTime(run.finished_at).replace(/, \d{4}/, ''), 'dag-run-date'));
+
+        const links = makeText('span', '', 'dag-run-links');
+        if (run.airflow_sha && /^[0-9a-f]{7,40}$/i.test(run.airflow_sha)) {
+          const commit = document.createElement('a');
+          commit.href = `https://github.com/apache/airflow/commit/${run.airflow_sha}`;
+          commit.textContent = run.airflow_sha.slice(0, 8);
+          commit.target = '_blank';
+          commit.rel = 'noopener noreferrer';
+          commit.title = `Airflow ${run.airflow_ref || 'main'} @ ${run.airflow_sha}`;
+          links.append(commit);
+        } else {
+          links.append(makeText('span', 'no SHA'));
+        }
+        if (typeof run.workflow_run_url === 'string' && /^https:\/\//.test(run.workflow_run_url)) {
+          const logs = document.createElement('a');
+          logs.href = run.workflow_run_url;
+          logs.textContent = 'logs';
+          logs.target = '_blank';
+          logs.rel = 'noopener noreferrer';
+          links.append(logs);
+        }
+        th.append(links);
+        headerRow.append(th);
+      }
+      header.append(headerRow);
+
+      for (const dagId of dagIds) {
+        const row = document.createElement('tr');
+        const name = makeText('th', dagId);
+        name.scope = 'row';
+        row.append(name);
+        for (const run of visibleRuns) {
+          const cell = document.createElement('td');
+          const result = Array.isArray(run.dags)
+            ? run.dags.find(dag => dag.dag_id === dagId)?.result
+            : null;
+          const label = result === 'success' ? 'Pass' : result === 'failure' ? 'Fail' : result === 'skipped' ? 'Skip' : '—';
+          const badge = makeText('span', label, `dag-result ${result || 'unknown'}`);
+          badge.title = `${dagId}: ${result || 'no result'} · ${run.airflow_ref || 'main'} @ ${run.airflow_sha || 'unknown'} · ${formatTime(run.finished_at)}`;
+          cell.append(badge);
+          row.append(cell);
+        }
+        body.append(row);
+      }
+    };
+
     const renderTimeline = runs => {
       const track = document.querySelector('#timeline');
       track.replaceChildren();
@@ -561,6 +723,7 @@
       .then(data => {
         const runs = Array.isArray(data.runs) ? data.runs : [];
         renderTimeline(runs);
+        renderDagGrid(runs);
 
         const latest = runs[0];
         if (!latest) {

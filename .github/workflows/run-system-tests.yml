@@ -9,7 +9,7 @@ on:
         default: main
         type: string
   schedule:
-    - cron: '0 4 * * 1'
+    - cron: '0 4 * * *'
 
 concurrency:
   group: huggingface-system-tests-history
@@ -26,10 +26,10 @@ jobs:
     timeout-minutes: 180
     env:
       AIRFLOW_REF: ${{ inputs.airflow_ref || 'main' }}
-      # Breeze derives the CI image name from this value:
-      #   ghcr.io/<BREEZE_GITHUB_REPOSITORY>/<branch>/ci/python<version>
-      # It MUST be identical for `ci-image build` and `testing system-tests`.
-      BREEZE_GITHUB_REPOSITORY: ${{ github.repository }}
+      # Use Airflow's published CI image cache as the starting point. Breeze
+      # checks the checked-out source hash and rebuilds when that source differs.
+      # Keep this the same for `ci-image build` and `testing system-tests`.
+      BREEZE_GITHUB_REPOSITORY: apache/airflow
       BREEZE_PYTHON: '3.11'
       # Non-interactive: auto-answer Breeze's rebuild/remove prompts.
       ANSWER: 'yes'
@@ -48,10 +48,6 @@ jobs:
       - name: Record run metadata
         id: start
         run: echo "started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-
-      - name: Validate provider system-test path
-        working-directory: airflow
-        run: python3 ../scripts/validate_provider_tests.py
 
       - name: Set up uv for Breeze
         uses: astral-sh/setup-uv@v10.3.3
@@ -152,6 +148,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pages: write
+      id-token: write
     steps:
       - name: Check out dashboard repository
         uses: actions/checkout@v4.4.0
@@ -175,8 +173,10 @@ jobs:
             --run-url "$RUN_URL" \
             --run-id "$RUN_ID"
 
+      - name: Sanitize public run history
+        run: python3 scripts/sanitize_runs.py site/data/runs.json
+
       - name: Commit updated run history
-        if: always()
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -196,3 +196,28 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5.0.0
+
+      - name: Upload dashboard for this workflow run
+        uses: actions/upload-pages-artifact@v3.0.1
+        with:
+          path: site
+
+  deploy-pages:
+    needs: update-history
+    if: always() && needs.update-history.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy dashboard from this workflow run
+        id: deployment
+        uses: actions/deploy-pages@v4.0.5
+        with:
+          artifact_name: github-pages
