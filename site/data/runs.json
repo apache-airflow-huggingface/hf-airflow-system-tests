@@ -4,6 +4,40 @@
     {
       "provider": "huggingface",
       "airflow_ref": "main",
+      "airflow_sha": "e76ea94dbc9f274346d153e5347a795e70a54c11",
+      "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/45192902839",
+      "started_at": "2026-11-23T14:19:31Z",
+      "finished_at": "2026-11-23T14:27:24Z",
+      "result": "failure",
+      "tests": {
+        "total": 2,
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "duration_seconds": 473,
+      "run_id": "45192902839"
+    },
+    {
+      "provider": "huggingface",
+      "airflow_ref": "main",
+      "airflow_sha": "e76ea94dbc9f274346d153e5347a795e70a54c11",
+      "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/45191033643",
+      "started_at": "2026-11-23T14:08:59Z",
+      "finished_at": "2026-11-23T14:17:55Z",
+      "result": "success",
+      "tests": {
+        "total": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "duration_seconds": 536,
+      "run_id": "45191033643"
+    },
+    {
+      "provider": "huggingface",
+      "airflow_ref": "main",
       "airflow_sha": "fa1aa9dea199aeb8de09971b9c64e06c8d83e80f",
       "workflow_run_url": "https://github.com/apache-airflow-huggingface/hf-airflow-system-tests/actions/runs/44464031948",
       "started_at": "2026-11-19T05:16:46Z",
